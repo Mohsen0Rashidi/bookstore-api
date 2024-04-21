@@ -4,7 +4,6 @@ import morgan from 'morgan'
 import bookRouter from './routes/bookRoutes.mjs'
 import userRouter from './routes/userRoutes.mjs'
 import globalErrorHandler from './controller/errorController.mjs'
-
 const app = express()
 
 app.use(cookieParser())

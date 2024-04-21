@@ -1,17 +1,18 @@
 import jwt from 'jsonwebtoken'
 import passport from 'passport'
 import passportJWT from 'passport-jwt'
+import crypto from 'crypto'
 import dotenv from 'dotenv'
 dotenv.config()
 import User from '../models/userModel.mjs'
 import catchAsyncErrors from '../utils/catchAsyncErrors.mjs'
 import AppError from '../utils/appError.mjs'
+import { sendEmail } from '../utils/email.mjs'
 
 const { sign } = jwt
 const { Strategy: JWTStrategy, ExtractJwt } = passportJWT
 
 const cookieOpt = {}
-
 
 /**
  * Extracts the JWT token from the request cookies.
@@ -30,7 +31,6 @@ const cookieExtractor = (req) => {
   // Return the extracted token.
   return token
 }
-
 
 // Set the cookieExtractor function as the function to extract the JWT from the request cookies.
 cookieOpt.jwtFromRequest = cookieExtractor
@@ -125,7 +125,6 @@ export const signUp = catchAsyncErrors(async (req, res) => {
   createSendToken(user, 200, res)
 })
 
-
 /**
  * Handles user login
  * @param {object} req - The request object
@@ -145,8 +144,9 @@ export const login = catchAsyncErrors(async (req, res, next) => {
   // Find user by email and select password
   const user = await User.findOne({ email }).select('+password')
 
+  console.log(`loged user:${user}`)
   // Check if user exists and password is correct
-  if (!user || !(await user.comparePssword(password, user.password))) {
+  if (!user || !(await user.comparePassword(password, user.password))) {
     // Return an error if user or password is incorrect
     return next(new AppError('Incorrect email or password', 404))
   }
@@ -154,7 +154,6 @@ export const login = catchAsyncErrors(async (req, res, next) => {
   // Send a token to the user after successful login
   createSendToken(user, 200, res)
 })
-
 
 /**
  * Middleware function to check if the user is an admin.
@@ -179,7 +178,6 @@ export const isAdmin = (req, res, next) => {
     )
   }
 }
-
 
 /**
  * Middleware function to update the user's password.
@@ -207,4 +205,138 @@ export const updatePassword = catchAsyncErrors(async (req, res, next) => {
   // Send a token to the user after successful password update.
   createSendToken(user, 200, res)
 })
+
+/**
+ * Function to handle forgot password requests.
+ *
+ * @param {object} req - The request object.
+ * @param {object} res - The response object.
+ * @param {function} next - The next middleware function.
+ */
+export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
+  /**
+   * Destructure the email from the request body.
+   */
+  const { email } = req.body
+
+  /**
+   * Find the user by email.
+   */
+  const user = await User.findOne({ email })
+
+  /**
+   * Return an error if user is not found.
+   */
+  if (!user) {
+    return next(new AppError('User not found with that ID', 404))
+  }
+
+  /**
+   * Generate a password reset token for the user.
+   */
+  const resetToken = user.generatePasswordResetToken()
+
+  /**
+   * Save the user to the database.
+   */
+  await user.save({ validateBeforeSave: false })
+
+  /**
+   * Generate the reset URL.
+   */
+  const resetURL = `${req.protocol}://${req.get(
+    'host',
+  )}/api/v1/user/reset-password/${resetToken}`
+
+  /**
+   * Generate the email text.
+   */
+  const text = `Forgot your password? Submit a PATCH request with your new password and passwordConfirm to: ${resetURL}.\nIf you didn't forget your password, please ignore this email!`
+
+  /**
+   * Generate the email subject.
+   */
+  const subject = 'Your password reset token (valid for 10 minutes)'
+
+  try {
+    /**
+     * Send the email.
+     */
+    await sendEmail({ email, subject, text })
+
+    /**
+     * Send a response to the client.
+     */
+    res.status(200).json({
+      status: 'ok',
+      message: 'Token sent to email',
+    })
+  } catch (err) {
+    /**
+     * Handle errors in sending the email.
+     */
+    user.passwordResetToken = undefined
+    user.passwordResetExpires = undefined
+    await user.save({ validateBeforeSave: false })
+
+    /**
+     * Return an error to the client.
+     */
+    return next(
+      new AppError(
+        'There was an error sending the email, Please try again later',
+        500,
+      ),
+    )
+  }
+})
+
+/**
+ * Function to handle password reset requests.
+ *
+ * @param {object} req - The request object.
+ * @param {object} res - The response object.
+ * @param {function} next - The next middleware function.
+ */
+export const resetPassword = catchAsyncErrors(async (req, res, next) => {
+  /**
+   * Destructure the token from the request parameters.
+   */
+  const { token } = req.params
+
+  /**
+   * Hash the token.
+   */
+  const hashedToken = crypto.createHash('sha256').update(token).toString('hex')
+
+  /**
+   * Find the user by the hashed token and expiration time.
+   */
+  const user = await User.findOne({
+    resetPasswordToken: hashedToken,
+    resetPasswordTokenExpires: { $gt: Date.now() },
+  })
+
+  /**
+   * Return an error if the token is invalid or expired.
+   */
+  if (!user) {
+    return next(new AppError('Token is invalid or has expired', 400))
+  }
+
+  /**
+   * Update the user's password and password confirmation.
+   */
+  user.password = req.body.password
+  user.passwordConfirm = req.body.passwordConfirm
+  user.resetPasswordToken = undefined
+  user.resetPasswordTokenExpires = undefined
+  await user.save()
+
+  /**
+   * Send a token to the user after successful password update.
+   */
+  createSendToken(user, 200, res)
+})
+
 

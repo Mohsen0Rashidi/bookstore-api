@@ -5,6 +5,8 @@ import {
   updatePassword,
   signUp,
   login,
+  forgotPassword,
+  resetPassword,
 } from '../controller/authController.mjs'
 import {
   getUsers,
@@ -20,6 +22,8 @@ const router = Router()
 
 router.post('/signup', signUp)
 router.post('/login', login)
+router.post('/forgot-password', forgotPassword)
+router.patch('/reset-password/:token', resetPassword)
 
 router.use(authenticateJwt)
 
