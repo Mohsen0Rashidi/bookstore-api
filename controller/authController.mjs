@@ -235,7 +235,7 @@ export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
    * Generate a password reset token for the user.
    */
   const resetToken = user.generatePasswordResetToken()
-
+  console.log(`in forgot function:${resetToken}`)
   /**
    * Save the user to the database.
    */
@@ -262,7 +262,7 @@ export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
     /**
      * Send the email.
      */
-    await sendEmail({ email, subject, text })
+    await sendEmail(email, subject, text)
 
     /**
      * Send a response to the client.
@@ -307,14 +307,13 @@ export const resetPassword = catchAsyncErrors(async (req, res, next) => {
   /**
    * Hash the token.
    */
-  const hashedToken = crypto.createHash('sha256').update(token).toString('hex')
-
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex')
   /**
    * Find the user by the hashed token and expiration time.
    */
   const user = await User.findOne({
-    resetPasswordToken: hashedToken,
-    resetPasswordTokenExpires: { $gt: Date.now() },
+    passwordResetToken: hashedToken,
+    passwordResetExpires: { $gt: Date.now() },
   })
 
   /**
@@ -329,8 +328,8 @@ export const resetPassword = catchAsyncErrors(async (req, res, next) => {
    */
   user.password = req.body.password
   user.passwordConfirm = req.body.passwordConfirm
-  user.resetPasswordToken = undefined
-  user.resetPasswordTokenExpires = undefined
+  user.passwordResetToken = undefined
+  user.passwordResetExpires = undefined
   await user.save()
 
   /**
@@ -338,5 +337,3 @@ export const resetPassword = catchAsyncErrors(async (req, res, next) => {
    */
   createSendToken(user, 200, res)
 })
-
-

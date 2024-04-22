@@ -1,4 +1,6 @@
 import { createTransport } from 'nodemailer'
+import dotenv from 'dotenv'
+dotenv.config()
 
 /**
  * Sends an email using the provided email details.
@@ -19,7 +21,7 @@ export const sendEmail = async (email, subject, text) => {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
-  });
+  })
 
   // Details of the email to be sent
   const mailOptions = {
@@ -27,8 +29,8 @@ export const sendEmail = async (email, subject, text) => {
     to: email, // Recipient's email address
     subject, // Subject of the email
     text, // Body of the email
-  };
+  }
 
   // Send the email using the transporter
-  await transporter.sendMail(mailOptions);
-};
+  await transporter.sendMail(mailOptions)
+}

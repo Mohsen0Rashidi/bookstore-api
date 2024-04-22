@@ -57,7 +57,7 @@ const userSchema = new mongoose.Schema({
  */
 userSchema.pre('save', async function (next) {
   // If the document is not modified, skip the hashing process and move to the next middleware.
-  if (!this.isModified) return next()
+  if (!this.isModified || !this.password) return next()
 
   // Hash the user's password using bcrypt with a salt round of 12.
   this.password = await bcrypt.hash(this.password, 12)
@@ -99,7 +99,6 @@ userSchema.methods.comparePassword = async function (
   return await bcrypt.compare(candidatePassword, password)
 }
 
-
 /**
  * Generates a password reset token for the user.
  * The token is a 64 character hex string and is valid for 10 minutes.
@@ -109,24 +108,22 @@ userSchema.methods.comparePassword = async function (
  */
 userSchema.methods.generatePasswordResetToken = function () {
   // Generate a random 32 byte hex string using crypto.
-  const resetToken = crypto.randomBytes(32);
+  const resetToken = crypto.randomBytes(32).toString('hex')
   if (!resetToken) {
-    throw new Error('Failed to generate random bytes');
+    return new Error('Failed to generate random bytes')
   }
-
-  const resetTokenString = resetToken.toString('hex');
 
   // Hash the reset token using SHA256 and store it in the user document.
   this.passwordResetToken = crypto
     .createHash('sha256')
-    .update(resetTokenString)
-    .digest('hex');
+    .update(resetToken)
+    .digest('hex')
 
   // Set the expiration date for the password reset token.
-  this.passwordResetExpires = Date.now() + 10 * 60 * 1000;
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000
 
   // Return the generated reset token.
-  return resetTokenString;
+  return resetToken
 }
 
 const User = mongoose.model('User', userSchema)
